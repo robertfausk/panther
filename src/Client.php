@@ -21,7 +21,7 @@ use Facebook\WebDriver\WebDriverBy;
 use Facebook\WebDriver\WebDriverCapabilities;
 use Facebook\WebDriver\WebDriverExpectedCondition;
 use Facebook\WebDriver\WebDriverHasInputDevices;
-use Symfony\Component\BrowserKit\Client as BaseClient;
+use Symfony\Component\BrowserKit\AbstractBrowser;
 use Symfony\Component\BrowserKit\Request;
 use Symfony\Component\BrowserKit\Response;
 use Symfony\Component\DomCrawler\Form;
@@ -41,7 +41,7 @@ use Symfony\Component\Panther\WebDriver\WebDriverMouse;
  *
  * @method Crawler getCrawler()
  */
-final class Client extends BaseClient implements WebDriver, JavaScriptExecutor, WebDriverHasInputDevices
+final class Client extends AbstractBrowser implements WebDriver, JavaScriptExecutor, WebDriverHasInputDevices
 {
     use ExceptionThrower;
 
@@ -69,6 +69,11 @@ final class Client extends BaseClient implements WebDriver, JavaScriptExecutor, 
     {
         $this->browserManager = $browserManager;
         $this->baseUri = $baseUri;
+    }
+
+    public function getBrowserManager(): BrowserManagerInterface
+    {
+        return $this->browserManager;
     }
 
     public function __destruct()
@@ -150,7 +155,7 @@ final class Client extends BaseClient implements WebDriver, JavaScriptExecutor, 
         return parent::click($link);
     }
 
-    public function submit(Form $form, array $values = [])
+    public function submit(Form $form, array $values = [], array $serverParameters = [])
     {
         if ($form instanceof PantherForm) {
             foreach ($values as $field => $value) {
@@ -163,7 +168,7 @@ final class Client extends BaseClient implements WebDriver, JavaScriptExecutor, 
             return $this->crawler = $this->createCrawler();
         }
 
-        return parent::submit($form, $values);
+        return parent::submit($form, $values, $serverParameters);
     }
 
     public function refreshCrawler(): Crawler
@@ -242,7 +247,7 @@ final class Client extends BaseClient implements WebDriver, JavaScriptExecutor, 
             $this->webDriver->manage()->deleteAllCookies();
         }
 
-        $this->quit();
+        $this->quit(false);
         $this->start();
     }
 
@@ -334,13 +339,16 @@ final class Client extends BaseClient implements WebDriver, JavaScriptExecutor, 
         return $this->webDriver->getWindowHandles();
     }
 
-    public function quit()
+    public function quit(bool $quitBrowserManager = true)
     {
         if (null !== $this->webDriver) {
             $this->webDriver->quit();
             $this->webDriver = null;
         }
-        $this->browserManager->quit();
+
+        if ($quitBrowserManager) {
+            $this->browserManager->quit();
+        }
     }
 
     public function takeScreenshot($saveAs = null)

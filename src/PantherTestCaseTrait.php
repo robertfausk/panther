@@ -52,9 +52,14 @@ trait PantherTestCaseTrait
     protected static $goutteClient;
 
     /**
-     * @var PantherClient|null
+     * @var PantherClient|null The primary Panther client instance created
      */
     protected static $pantherClient;
+
+    /**
+     * @var PantherClient[] All Panther clients, the first one is the primary one (aka self::$pantherClient)
+     */
+    protected static $pantherClients = [];
 
     /**
      * @var array
@@ -65,6 +70,7 @@ trait PantherTestCaseTrait
         'port' => 9080,
         'router' => '',
         'external_base_uri' => null,
+        'readinessPath' => '',
     ];
 
     public static function tearDownAfterClass(): void
@@ -82,8 +88,14 @@ trait PantherTestCaseTrait
         }
 
         if (null !== self::$pantherClient) {
-            self::$pantherClient->quit();
+            foreach (self::$pantherClients as $i => $pantherClient) {
+                // Stop ChromeDriver only when all sessions are already closed
+                $pantherClient->quit(false);
+            }
+
+            self::$pantherClient->getBrowserManager()->quit();
             self::$pantherClient = null;
+            self::$pantherClients = [];
         }
 
         if (null !== self::$goutteClient) {
@@ -109,10 +121,11 @@ trait PantherTestCaseTrait
         }
 
         $options = [
-            'webServerDir' => $options['webServerDir'] ?? static::$webServerDir ?? $_SERVER['PANTHER_WEB_SERVER_DIR'] ?? self::$defaultOptions['webServerDir'],
+            'webServerDir' => self::getWebServerDir($options),
             'hostname' => $options['hostname'] ?? self::$defaultOptions['hostname'],
             'port' => (int) ($options['port'] ?? $_SERVER['PANTHER_WEB_SERVER_PORT'] ?? self::$defaultOptions['port']),
             'router' => $options['router'] ?? $_SERVER['PANTHER_WEB_SERVER_ROUTER'] ?? self::$defaultOptions['router'],
+            'readinessPath' => $options['readinessPath'] ?? $_SERVER['PANTHER_READINESS_PATH'] ?? self::$defaultOptions['readinessPath'],
         ];
 
         self::$webServerManager = new WebServerManager(...array_values($options));
@@ -127,21 +140,41 @@ trait PantherTestCaseTrait
     }
 
     /**
-     * @param array $options       see {@see $defaultOptions}
-     * @param array $kernelOptions
+     * Creates the primary browser.
+     *
+     * @param array $options see {@see $defaultOptions}
      */
     protected static function createPantherClient(array $options = [], array $kernelOptions = []): PantherClient
     {
-        self::startWebServer($options);
-        if (null === self::$pantherClient) {
-            self::$pantherClient = Client::createChromeClient(null, null, [], self::$baseUri);
+        if (null !== self::$pantherClient) {
+            return self::$pantherClient;
         }
+
+        self::startWebServer($options);
+
+        self::$pantherClients[0] = self::$pantherClient = Client::createChromeClient(null, null, [], self::$baseUri);
 
         if (\is_a(self::class, KernelTestCase::class, true)) {
             static::bootKernel($kernelOptions);
         }
 
+        if (\is_callable([self::class, 'getClient'])) {
+            return self::getClient(self::$pantherClient);
+        }
+
         return self::$pantherClient;
+    }
+
+    /**
+     * Creates an additional browser. Convenient to test apps leveraging Mercure or WebSocket (e.g. a chat).
+     */
+    protected static function createAdditionalPantherClient(): PantherClient
+    {
+        if (null === self::$pantherClient) {
+            return self::createPantherClient();
+        }
+
+        return self::$pantherClients[] = self::$pantherClient = new PantherClient(self::$pantherClient->getBrowserManager(), self::$baseUri);
     }
 
     /**
@@ -166,6 +199,28 @@ trait PantherTestCaseTrait
             static::bootKernel($kernelOptions);
         }
 
+        // It's not possible to use assertions with Goutte yet, https://github.com/FriendsOfPHP/Goutte/pull/382 needed
         return self::$goutteClient;
+    }
+
+    private static function getWebServerDir(array $options)
+    {
+        if (isset($options['webServerDir'])) {
+            return $options['webServerDir'];
+        }
+
+        if (null !== static::$webServerDir) {
+            return static::$webServerDir;
+        }
+
+        if (!isset($_SERVER['PANTHER_WEB_SERVER_DIR'])) {
+            return self::$defaultOptions['webServerDir'];
+        }
+
+        if (0 === strpos($_SERVER['PANTHER_WEB_SERVER_DIR'], './')) {
+            return getcwd().substr($_SERVER['PANTHER_WEB_SERVER_DIR'], 1);
+        }
+
+        return $_SERVER['PANTHER_WEB_SERVER_DIR'];
     }
 }
