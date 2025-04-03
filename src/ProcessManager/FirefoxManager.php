@@ -13,9 +13,11 @@ declare(strict_types=1);
 
 namespace Symfony\Component\Panther\ProcessManager;
 
+use Facebook\WebDriver\Firefox\FirefoxOptions;
 use Facebook\WebDriver\Remote\DesiredCapabilities;
 use Facebook\WebDriver\Remote\RemoteWebDriver;
 use Facebook\WebDriver\WebDriver;
+use Symfony\Component\Panther\Exception\RuntimeException;
 use Symfony\Component\Process\ExecutableFinder;
 use Symfony\Component\Process\Process;
 
@@ -26,12 +28,12 @@ final class FirefoxManager implements BrowserManagerInterface
 {
     use WebServerReadinessProbeTrait;
 
-    private $process;
-    private $arguments;
-    private $options;
+    private Process $process;
+    private array $arguments;
+    private array $options;
 
     /**
-     * @throws \RuntimeException
+     * @throws RuntimeException
      */
     public function __construct(?string $geckodriverBinary = null, ?array $arguments = null, array $options = [])
     {
@@ -41,7 +43,7 @@ final class FirefoxManager implements BrowserManagerInterface
     }
 
     /**
-     * @throws \RuntimeException
+     * @throws RuntimeException
      */
     public function start(): WebDriver
     {
@@ -63,6 +65,17 @@ final class FirefoxManager implements BrowserManagerInterface
         $capabilities = DesiredCapabilities::firefox();
         $capabilities->setCapability('moz:firefoxOptions', $firefoxOptions);
 
+        // Prefer reduced motion, see https://developer.mozilla.org/fr/docs/Web/CSS/@media/prefers-reduced-motion
+        /** @var FirefoxOptions|array $firefoxOptions */
+        $firefoxOptions = $capabilities->getCapability('moz:firefoxOptions') ?? [];
+        $firefoxOptions = $firefoxOptions instanceof FirefoxOptions ? $firefoxOptions->toArray() : $firefoxOptions;
+        if (!filter_var($_SERVER['PANTHER_NO_REDUCED_MOTION'] ?? false, \FILTER_VALIDATE_BOOLEAN)) {
+            $firefoxOptions['prefs']['ui.prefersReducedMotion'] = 1;
+        } else {
+            $firefoxOptions['prefs']['ui.prefersReducedMotion'] = 0;
+        }
+        $capabilities->setCapability('moz:firefoxOptions', $firefoxOptions);
+
         foreach ($this->options['capabilities'] as $capability => $value) {
             $capabilities->setCapability($capability, $value);
         }
@@ -76,7 +89,7 @@ final class FirefoxManager implements BrowserManagerInterface
     }
 
     /**
-     * @throws \RuntimeException
+     * @throws RuntimeException
      */
     private function findGeckodriverBinary(): string
     {
@@ -84,7 +97,7 @@ final class FirefoxManager implements BrowserManagerInterface
             return $binary;
         }
 
-        throw new \RuntimeException('"geckodriver" binary not found. Install it using the package manager of your operating system or by running "composer require --dev dbrekelmans/bdi && vendor/bin/bdi detect drivers".');
+        throw new RuntimeException('"geckodriver" binary not found. Install it using the package manager of your operating system or by running "composer require --dev dbrekelmans/bdi && vendor/bin/bdi detect drivers".');
     }
 
     private function getDefaultArguments(): array
@@ -92,13 +105,12 @@ final class FirefoxManager implements BrowserManagerInterface
         $args = [];
 
         // Enable the headless mode unless PANTHER_NO_HEADLESS is defined
-        if (!($_SERVER['PANTHER_NO_HEADLESS'] ?? false)) {
+        if (!filter_var($_SERVER['PANTHER_NO_HEADLESS'] ?? false, \FILTER_VALIDATE_BOOLEAN)) {
             $args[] = '--headless';
-            $args[] = '--window-size=1200,1100';
         }
 
         // Enable devtools for debugging
-        if ($_SERVER['PANTHER_DEVTOOLS'] ?? true) {
+        if (filter_var($_SERVER['PANTHER_DEVTOOLS'] ?? true, \FILTER_VALIDATE_BOOLEAN)) {
             $args[] = '--devtools';
         }
 

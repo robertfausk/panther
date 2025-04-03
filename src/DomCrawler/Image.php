@@ -15,6 +15,7 @@ namespace Symfony\Component\Panther\DomCrawler;
 
 use Facebook\WebDriver\WebDriverElement;
 use Symfony\Component\DomCrawler\Image as BaseImage;
+use Symfony\Component\Panther\Exception\LogicException;
 use Symfony\Component\Panther\ExceptionThrower;
 
 /**
@@ -24,16 +25,17 @@ final class Image extends BaseImage
 {
     use ExceptionThrower;
 
-    private $element;
+    private WebDriverElement $element;
 
     public function __construct(WebDriverElement $element)
     {
         if ('img' !== $tagName = $element->getTagName()) {
-            throw new \LogicException(sprintf('Unable to visualize a "%s" tag.', $tagName));
+            throw new LogicException(\sprintf('Unable to visualize a "%s" tag.', $tagName));
         }
 
         $this->element = $element;
         $this->method = 'GET';
+        $this->currentUri = null;
     }
 
     public function getNode(): \DOMElement

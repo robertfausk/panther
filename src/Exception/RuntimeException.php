@@ -11,10 +11,11 @@
 
 declare(strict_types=1);
 
-require __DIR__.'/security-check.php';
+namespace Symfony\Component\Panther\Exception;
 
-if ('APP_ENV' === ($_GET['name'] ?? null)) { ?>
-    <?php echo $_ENV['APP_ENV']; ?>
-<?php } else { ?>
-    <?php echo $_ENV['FOO']; ?>
-<?php } ?>
+/**
+ * Base RuntimeException for Panther component.
+ */
+class RuntimeException extends \RuntimeException implements ExceptionInterface
+{
+}

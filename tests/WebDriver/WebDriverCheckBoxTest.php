@@ -53,7 +53,7 @@ class WebDriverCheckBoxTest extends TestCase
         $this->assertSame($options, $values);
     }
 
-    public function getOptionsDataProvider(): iterable
+    public static function getOptionsDataProvider(): iterable
     {
         yield ['checkbox', ['j2a', 'j2b', 'j2c']];
         yield ['radio', ['j3a', 'j3b', 'j3c']];
@@ -132,7 +132,7 @@ class WebDriverCheckBoxTest extends TestCase
         $this->assertSame($selectedOptions, $selectedValues);
     }
 
-    public function selectByValueDataProvider(): iterable
+    public static function selectByValueDataProvider(): iterable
     {
         yield ['checkbox', ['j2b', 'j2c']];
         yield ['radio', ['j3b']];
@@ -169,7 +169,7 @@ class WebDriverCheckBoxTest extends TestCase
         $this->assertSame(array_values($selectedOptions), $selectedValues);
     }
 
-    public function selectByIndexDataProvider(): iterable
+    public static function selectByIndexDataProvider(): iterable
     {
         yield ['checkbox', [1 => 'j2b', 2 => 'j2c']];
         yield ['radio', [1 => 'j3b']];
@@ -199,7 +199,7 @@ class WebDriverCheckBoxTest extends TestCase
         $this->assertSame($value, $c->getFirstSelectedOption()->getAttribute('value'));
     }
 
-    public function selectByVisibleTextDataProvider(): iterable
+    public static function selectByVisibleTextDataProvider(): iterable
     {
         yield ['checkbox', 'J2B', 'j2b'];
         yield ['checkbox', 'J2C', 'j2c'];
@@ -220,7 +220,7 @@ class WebDriverCheckBoxTest extends TestCase
         $this->assertSame($value, $c->getFirstSelectedOption()->getAttribute('value'));
     }
 
-    public function selectByVisiblePartialTextDataProvider(): iterable
+    public static function selectByVisiblePartialTextDataProvider(): iterable
     {
         yield ['checkbox', '2B', 'j2b'];
         yield ['checkbox', '2C', 'j2c'];
@@ -336,5 +336,29 @@ class WebDriverCheckBoxTest extends TestCase
         $element = $crawler->filterXPath('//input[@type="radio"]')->getElement(0);
         $c = new WebDriverCheckbox($element);
         $c->deselectByVisiblePartialText('AB');
+    }
+
+    /**
+     * @dataProvider selectByValueDataProviderWithZeroValue
+     */
+    public function testWebDriverCheckboxSelectByValueWithZeroValue(string $type, string $selectedAndExpectedOption): void
+    {
+        $crawler = self::createPantherClient()->request('GET', self::$baseUri.'/form.html');
+        $element = $crawler->filterXPath("//form[@id='zero-form-$type']/input")->getElement(0);
+
+        $c = new WebDriverCheckbox($element);
+        $c->selectByValue($selectedAndExpectedOption);
+
+        $selectedValues = [];
+        foreach ($c->getAllSelectedOptions() as $option) {
+            $selectedValues[] = $option->getAttribute('value');
+        }
+        $this->assertSame([$selectedAndExpectedOption], $selectedValues);
+    }
+
+    public static function selectByValueDataProviderWithZeroValue(): iterable
+    {
+        yield ['checkbox', '0'];
+        yield ['radio', '0'];
     }
 }

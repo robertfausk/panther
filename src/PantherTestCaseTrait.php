@@ -18,6 +18,7 @@ use Symfony\Bundle\FrameworkBundle\Test\KernelTestCase;
 use Symfony\Component\BrowserKit\HttpBrowser as HttpBrowserClient;
 use Symfony\Component\HttpClient\HttpClient;
 use Symfony\Component\Panther\Client as PantherClient;
+use Symfony\Component\Panther\Exception\RuntimeException;
 use Symfony\Component\Panther\ProcessManager\ChromeManager;
 use Symfony\Component\Panther\ProcessManager\FirefoxManager;
 use Symfony\Component\Panther\ProcessManager\WebServerManager;
@@ -29,52 +30,33 @@ use Symfony\Component\Panther\ProcessManager\WebServerManager;
  */
 trait PantherTestCaseTrait
 {
-    /**
-     * @var bool
-     */
-    public static $stopServerOnTeardown = true;
+    public static bool $stopServerOnTeardown = true;
 
-    /**
-     * @var string|null
-     */
-    protected static $webServerDir;
+    protected static ?string $webServerDir = null;
 
-    /**
-     * @var WebServerManager|null
-     */
-    protected static $webServerManager;
+    protected static ?WebServerManager $webServerManager = null;
 
-    /**
-     * @var string|null
-     */
-    protected static $baseUri;
+    protected static ?string $baseUri = null;
 
-    /**
-     * @var HttpBrowserClient|null
-     */
-    protected static $httpBrowserClient;
+    protected static ?HttpBrowserClient $httpBrowserClient = null;
 
     /**
      * @var PantherClient|null The primary Panther client instance created
      */
-    protected static $pantherClient;
+    protected static ?PantherClient $pantherClient = null;
 
     /**
      * @var PantherClient[] All Panther clients, the first one is the primary one (aka self::$pantherClient)
      */
-    protected static $pantherClients = [];
+    protected static array $pantherClients = [];
 
-    /**
-     * @var array
-     */
-    protected static $defaultOptions = [
+    protected static array $defaultOptions = [
         'webServerDir' => __DIR__.'/../../../../public', // the Flex directory structure
         'hostname' => '127.0.0.1',
         'port' => 9080,
         'router' => '',
         'external_base_uri' => null,
         'readinessPath' => '',
-        'browser' => PantherTestCase::CHROME,
         'env' => [],
     ];
 
@@ -93,7 +75,7 @@ trait PantherTestCaseTrait
         }
 
         if (null !== self::$pantherClient) {
-            foreach (self::$pantherClients as $i => $pantherClient) {
+            foreach (self::$pantherClients as $pantherClient) {
                 // Stop ChromeDriver only when all sessions are already closed
                 $pantherClient->quit(false);
             }
@@ -119,7 +101,7 @@ trait PantherTestCaseTrait
             return;
         }
 
-        if ($externalBaseUri = $options['external_base_uri'] ?? $_SERVER['PANTHER_EXTERNAL_BASE_URI'] ?? self::$defaultOptions['external_base_uri']) {
+        if ($externalBaseUri = $options['external_base_uri'] ?? self::$defaultOptions['external_base_uri'] ?? $_SERVER['PANTHER_EXTERNAL_BASE_URI'] ?? $_SERVER['SYMFONY_PROJECT_DEFAULT_ROUTE_URL'] ?? null) {
             self::$baseUri = $externalBaseUri;
 
             return;
@@ -137,7 +119,7 @@ trait PantherTestCaseTrait
         self::$webServerManager = new WebServerManager(...array_values($options));
         self::$webServerManager->start();
 
-        self::$baseUri = sprintf('http://%s:%s', $options['hostname'], $options['port']);
+        self::$baseUri = \sprintf('http://%s:%s', $options['hostname'], $options['port']);
     }
 
     public static function isWebServerStarted(): bool
@@ -147,14 +129,30 @@ trait PantherTestCaseTrait
 
     public function takeScreenshotIfTestFailed(): void
     {
-        if (!\in_array($this->getStatus(), [BaseTestRunner::STATUS_ERROR, BaseTestRunner::STATUS_FAILURE], true)) {
+        if (class_exists(BaseTestRunner::class) && method_exists($this, 'getStatus')) {
+            /**
+             * PHPUnit <10 TestCase.
+             */
+            $status = $this->getStatus();
+            $isError = BaseTestRunner::STATUS_FAILURE === $status;
+            $isFailure = BaseTestRunner::STATUS_ERROR === $status;
+        } elseif (method_exists($this, 'status')) {
+            /**
+             * PHPUnit 10 TestCase.
+             */
+            $status = $this->status();
+            $isError = $status->isError();
+            $isFailure = $status->isFailure();
+        } else {
+            /*
+             * Symfony WebTestCase.
+             */
             return;
         }
-
-        $type = BaseTestRunner::STATUS_FAILURE === $this->getStatus() ? 'failure' : 'error';
-        $test = $this->toString();
-
-        ServerExtension::takeScreenshots($type, $test);
+        if ($isError || $isFailure) {
+            $type = $isError ? 'error' : 'failure';
+            ServerExtensionLegacy::takeScreenshots($type, $this->toString());
+        }
     }
 
     /**
@@ -164,26 +162,45 @@ trait PantherTestCaseTrait
      */
     protected static function createPantherClient(array $options = [], array $kernelOptions = [], array $managerOptions = []): PantherClient
     {
-        $browser = ($options['browser'] ?? self::$defaultOptions['browser'] ?? PantherTestCase::CHROME);
-        $callGetClient = \is_callable([self::class, 'getClient']) && (new \ReflectionMethod(self::class, 'getClient'))->isStatic();
+        $browser = ($options['browser'] ?? self::$defaultOptions['browser'] ?? null);
+        $callGetClient = method_exists(self::class, 'getClient') && (new \ReflectionMethod(self::class, 'getClient'))->isStatic();
         if (null !== self::$pantherClient) {
             $browserManager = self::$pantherClient->getBrowserManager();
             if (
-                (PantherTestCase::CHROME === $browser && $browserManager instanceof ChromeManager) ||
-                (PantherTestCase::FIREFOX === $browser && $browserManager instanceof FirefoxManager)
+                (PantherTestCase::CHROME === $browser && $browserManager instanceof ChromeManager)
+                || (PantherTestCase::FIREFOX === $browser && $browserManager instanceof FirefoxManager)
             ) {
                 ServerExtension::registerClient(self::$pantherClient);
 
-                return $callGetClient ? self::getClient(self::$pantherClient) : self::$pantherClient; // @phpstan-ignore-line
+                /* @phpstan-ignore-next-line */
+                return $callGetClient ? self::getClient(self::$pantherClient) : self::$pantherClient;
             }
         }
 
         self::startWebServer($options);
 
-        if (PantherTestCase::CHROME === $browser) {
-            self::$pantherClients[0] = self::$pantherClient = Client::createChromeClient(null, null, $managerOptions, self::$baseUri);
+        $browserArguments = $options['browser_arguments'] ?? null;
+        if (null !== $browserArguments && !\is_array($browserArguments)) {
+            throw new \TypeError(\sprintf('Expected key "browser_arguments" to be an array or null, "%s" given.', get_debug_type($browserArguments)));
+        }
+
+        if (PantherTestCase::FIREFOX === $browser) {
+            self::$pantherClients[0] = self::$pantherClient = PantherClient::createFirefoxClient(null, $browserArguments, $managerOptions, self::$baseUri);
+        } elseif (PantherTestCase::SELENIUM === $browser) {
+            self::$pantherClients[0] = self::$pantherClient = PantherClient::createSeleniumClient($managerOptions['host'], $managerOptions['capabilities'] ?? null, self::$baseUri, $options);
         } else {
-            self::$pantherClients[0] = self::$pantherClient = Client::createFirefoxClient(null, null, $managerOptions, self::$baseUri);
+            try {
+                self::$pantherClients[0] = self::$pantherClient = PantherClient::createChromeClient(null, $browserArguments, $managerOptions, self::$baseUri);
+            } catch (RuntimeException $e) {
+                if (PantherTestCase::CHROME === $browser) {
+                    throw $e;
+                }
+                self::$pantherClients[0] = self::$pantherClient = PantherClient::createFirefoxClient(null, $browserArguments, $managerOptions, self::$baseUri);
+            }
+
+            if (null === $browser) {
+                self::$defaultOptions['browser'] = self::$pantherClient->getBrowserManager() instanceof ChromeManager ? PantherTestCase::CHROME : PantherTestCase::FIREFOX;
+            }
         }
 
         if (is_a(self::class, KernelTestCase::class, true)) {
@@ -192,7 +209,8 @@ trait PantherTestCaseTrait
 
         ServerExtension::registerClient(self::$pantherClient);
 
-        return $callGetClient ? self::getClient(self::$pantherClient) : self::$pantherClient; // @phpstan-ignore-line
+        /* @phpstan-ignore-next-line */
+        return $callGetClient ? self::getClient(self::$pantherClient) : self::$pantherClient;
     }
 
     /**
@@ -219,9 +237,14 @@ trait PantherTestCaseTrait
         self::startWebServer($options);
 
         if (null === self::$httpBrowserClient) {
-            // The ScopingHttpClient cant't be used cause the HttpBrowser only supports absolute URLs,
+            $httpClientOptions = $options['http_client_options'] ?? [];
+            if (!\is_array($httpClientOptions)) {
+                throw new \TypeError(\sprintf('Expected key "http_client_options" to be an array, "%s" given.', get_debug_type($httpClientOptions)));
+            }
+
+            // The ScopingHttpClient can't be used cause the HttpBrowser only supports absolute URLs,
             // https://github.com/symfony/symfony/pull/35177
-            self::$httpBrowserClient = new HttpBrowserClient(HttpClient::create());
+            self::$httpBrowserClient = new HttpBrowserClient(HttpClient::create($httpClientOptions));
         }
 
         if (is_a(self::class, KernelTestCase::class, true)) {
@@ -229,12 +252,14 @@ trait PantherTestCaseTrait
         }
 
         $urlComponents = parse_url(self::$baseUri);
-        self::$httpBrowserClient->setServerParameter('HTTP_HOST', sprintf('%s:%s', $urlComponents['host'], $urlComponents['port']));
+        self::$httpBrowserClient->setServerParameter('HTTP_HOST', \sprintf('%s:%s', $urlComponents['host'], $urlComponents['port']));
         if ('https' === $urlComponents['scheme']) {
             self::$httpBrowserClient->setServerParameter('HTTPS', 'true');
         }
 
-        return \is_callable([self::class, 'getClient']) && (new \ReflectionMethod(self::class, 'getClient'))->isStatic() ? self::getClient(self::$httpBrowserClient) : self::$httpBrowserClient; // @phpstan-ignore-line
+        // @phpstan-ignore-next-line
+        return method_exists(self::class, 'getClient') && (new \ReflectionMethod(self::class, 'getClient'))->isStatic() ?
+            self::getClient(self::$httpBrowserClient) : self::$httpBrowserClient;
     }
 
     private static function getWebServerDir(array $options): string
@@ -251,7 +276,7 @@ trait PantherTestCaseTrait
             return self::$defaultOptions['webServerDir'];
         }
 
-        if (0 === strpos($_SERVER['PANTHER_WEB_SERVER_DIR'], './')) {
+        if (str_starts_with($_SERVER['PANTHER_WEB_SERVER_DIR'], './')) {
             return getcwd().substr($_SERVER['PANTHER_WEB_SERVER_DIR'], 1);
         }
 

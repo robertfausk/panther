@@ -23,14 +23,14 @@ use Facebook\WebDriver\WebDriverCapabilities;
  */
 final class SeleniumManager implements BrowserManagerInterface
 {
-    private $host;
-    private $capabilities;
-    private $options;
+    private ?string $host;
+    private WebDriverCapabilities $capabilities;
+    private ?array $options;
 
     public function __construct(
         ?string $host = 'http://127.0.0.1:4444/wd/hub',
         ?WebDriverCapabilities $capabilities = null,
-        ?array $options = []
+        ?array $options = [],
     ) {
         $this->host = $host;
         $this->capabilities = $capabilities ?? DesiredCapabilities::chrome();

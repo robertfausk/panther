@@ -17,14 +17,15 @@ use Facebook\WebDriver\Interactions\Internal\WebDriverCoordinates;
 use Facebook\WebDriver\Internal\WebDriverLocatable;
 use Facebook\WebDriver\WebDriverMouse as BaseWebDriverMouse;
 use Symfony\Component\Panther\Client;
+use Symfony\Component\Panther\Exception\RuntimeException;
 
 /**
  * @author Dany Maillard <danymaillard93b@gmail.com>
  */
 final class WebDriverMouse implements BaseWebDriverMouse
 {
-    private $mouse;
-    private $client;
+    private BaseWebDriverMouse $mouse;
+    private Client $client;
 
     public function __construct(BaseWebDriverMouse $mouse, Client $client)
     {
@@ -109,7 +110,7 @@ final class WebDriverMouse implements BaseWebDriverMouse
         $element = $this->client->getCrawler()->filter($cssSelector)->getElement(0);
 
         if (!$element instanceof WebDriverLocatable) {
-            throw new \RuntimeException(sprintf('The element of "%s" CSS selector does not implement "%s".', $cssSelector, WebDriverLocatable::class));
+            throw new RuntimeException(\sprintf('The element of "%s" CSS selector does not implement "%s".', $cssSelector, WebDriverLocatable::class));
         }
 
         return $element->getCoordinates();

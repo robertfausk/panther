@@ -8,16 +8,20 @@ parameters:
 	inferPrivatePropertyTypeFromConstructor: true
 	excludePaths:
 	    - tests/DummyKernel.php
+	    # There are lots of missing phpunit classes since we are supporting multiple versions
+	    - src/ServerExtension.php
 	ignoreErrors:
-		- message: '#.+#'
-		  path: tests/DummyKernel.php
 		# False positive
 		- '#Call to an undefined method ReflectionType::getName\(\)\.#'
+		# False positive : assertNotEmpty assert that count() !== 0 on Countable
+		- '#Call to static method PHPUnit\\Framework\\Assert::assert(Not)?Empty\(\) with Symfony\\Component\\DomCrawler\\Crawler will always evaluate to (true|false)\.#'
+		# False positive : getStatus exists for PHPUnit < 10 only
+		- '#Call to function method_exists\(\) with \$this\(Symfony\\Component\\Panther\\PantherTestCase\) and ''getStatus'' will always evaluate to true\.#'
+		# False positive : PantherTestCase has no getClient method when symfony/framework-bundle (and WebTestCase) are not available
+		- '#Call to function method_exists\(\) with ''Symfony\\\\Component\\\\Panther\\\\PantherTestCase'' and ''getClient'' will always evaluate to true\.#'
 		# To fix in PHP WebDriver
 		- '#Parameter \#2 \$desired_capabilities of static method Facebook\\WebDriver\\Remote\\RemoteWebDriver::create\(\) expects array\|Facebook\\WebDriver\\Remote\\DesiredCapabilities\|null, Facebook\\WebDriver\\WebDriverCapabilities given\.#'
 		# Require a redesign of the underlying Symfony components
 		- '#Call to an undefined method DOMNode::getTagName\(\)\.#'
 		- '#Return type \(void\) of method Symfony\\Component\\Panther\\DomCrawler\\Crawler::clear\(\) should be compatible with return type \(Facebook\\WebDriver\\WebDriverElement\) of method Facebook\\WebDriver\\WebDriverElement::clear\(\)#'
-		- '#Method Symfony\\Component\\Panther\\DomCrawler\\Crawler::getIterator\(\) should return ArrayIterator<int, DOMNode> but returns ArrayIterator<\(int\|string\), Facebook\\WebDriver\\WebDriverElement>\.#'
-		- '#^Expression on left side of \?\? is not nullable\.$#'
-		- '#^PHPDoc type array of property Symfony\\Component\\Panther\\DomCrawler\\Field\\FileFormField\:\:\$value is not covariant with PHPDoc type string of overridden property Symfony\\Component\\DomCrawler\\Field\\FormField\:\:\$value\.$#'
+		- '#Return type \(ArrayIterator<int, Facebook\\WebDriver\\WebDriverElement>\) of method Symfony\\Component\\Panther\\DomCrawler\\Crawler::getIterator\(\) should be compatible with return type \(ArrayIterator<int, DOMNode>\) of method Symfony\\Component\\DomCrawler\\Crawler::getIterator\(\)#'

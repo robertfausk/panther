@@ -14,7 +14,7 @@ declare(strict_types=1);
 namespace Symfony\Component\Panther\Tests;
 
 use Symfony\Component\Panther\PantherTestCase;
-use Symfony\Component\Panther\ServerExtension;
+use Symfony\Component\Panther\ServerExtensionLegacy;
 
 class ServerExtensionTest extends TestCase
 {
@@ -25,7 +25,7 @@ class ServerExtensionTest extends TestCase
 
     public function testStartAndStop(): void
     {
-        $extension = new ServerExtension();
+        $extension = new ServerExtensionLegacy();
 
         $extension->executeBeforeFirstTest();
         static::assertFalse(PantherTestCase::$stopServerOnTeardown);
@@ -39,12 +39,12 @@ class ServerExtensionTest extends TestCase
      */
     public function testPauseOnFailure(string $method, string $expected): void
     {
-        $extension = new ServerExtension();
+        $extension = new ServerExtensionLegacy();
         $extension->testing = true;
 
         // stores current state
         $argv = $_SERVER['argv'];
-        $noHeadless = $_SERVER['PANTHER_NO_HEADLESS'] ?? false;
+        $noHeadless = filter_var($_SERVER['PANTHER_NO_HEADLESS'] ?? false, \FILTER_VALIDATE_BOOLEAN);
 
         self::startWebServer();
         $_SERVER['argv'][] = '--debug';
@@ -62,7 +62,7 @@ class ServerExtensionTest extends TestCase
         }
     }
 
-    public function provideTestPauseOnFailure(): iterable
+    public static function provideTestPauseOnFailure(): iterable
     {
         yield ['executeAfterTestError', "Error: message\n\nPress enter to continue..."];
         yield ['executeAfterTestFailure', "Failure: message\n\nPress enter to continue..."];

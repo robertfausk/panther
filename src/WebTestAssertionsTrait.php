@@ -16,9 +16,9 @@ namespace Symfony\Component\Panther;
 use Facebook\WebDriver\WebDriverElement;
 use Symfony\Bundle\FrameworkBundle\KernelBrowser;
 use Symfony\Bundle\FrameworkBundle\Test\WebTestAssertionsTrait as BaseWebTestAssertionsTrait;
-use Symfony\Component\BrowserKit\AbstractBrowser;
 use Symfony\Component\DependencyInjection\Exception\ServiceNotFoundException;
 use Symfony\Component\Panther\Client as PantherClient;
+use Symfony\Component\Panther\Exception\LogicException;
 
 /**
  * Tweaks Symfony's WebTestAssertionsTrait to be compatible with Panther.
@@ -39,8 +39,9 @@ trait WebTestAssertionsTrait
         $client = self::getClient();
 
         if ($client instanceof PantherClient) {
-            $element = self::findElement($selector);
-            self::assertNotNull($element, $message);
+            $by = $client::createWebDriverByFromLocator($selector);
+            $elements = $client->findElements($by);
+            self::assertNotEmpty($elements, $message);
 
             return;
         }
@@ -92,12 +93,6 @@ trait WebTestAssertionsTrait
     {
         $client = self::getClient();
         if ($client instanceof PantherClient) {
-            if (method_exists(self::class, 'assertStringContainsString')) {
-                self::assertStringContainsString($expectedTitle, $client->getTitle());
-
-                return;
-            }
-
             self::assertStringContainsString($expectedTitle, $client->getTitle());
 
             return;
@@ -194,7 +189,7 @@ trait WebTestAssertionsTrait
         self::assertSelectorAttributeContains($locator, 'disabled', 'true');
     }
 
-    public static function assertSelectorAttributeContains(string $locator, string $attribute, string $text = null): void
+    public static function assertSelectorAttributeContains(string $locator, string $attribute, ?string $text = null): void
     {
         if (null === $text) {
             self::assertNull(self::getAttribute($locator, $attribute));
@@ -259,7 +254,7 @@ trait WebTestAssertionsTrait
     {
         $client = self::getClient();
         if (!$client instanceof PantherClient) {
-            throw new \LogicException(sprintf('Using a client that is not an instance of "%s" is not supported.', PantherClient::class));
+            throw new LogicException(\sprintf('Using a client that is not an instance of "%s" is not supported.', PantherClient::class));
         }
 
         $by = $client::createWebDriverByFromLocator($locator);
@@ -275,9 +270,9 @@ trait WebTestAssertionsTrait
      * @param array $options An array of options to pass to the createKernel method
      * @param array $server  An array of server parameters
      *
-     * @return AbstractBrowser A browser instance
+     * @return KernelBrowser A browser instance
      */
-    protected static function createClient(array $options = [], array $server = []): AbstractBrowser
+    protected static function createClient(array $options = [], array $server = []): KernelBrowser
     {
         $kernel = static::bootKernel($options);
 
@@ -286,13 +281,16 @@ trait WebTestAssertionsTrait
             $client = $kernel->getContainer()->get('test.client');
         } catch (ServiceNotFoundException $e) {
             if (class_exists(KernelBrowser::class)) {
-                throw new \LogicException('You cannot create the client used in functional tests if the "framework.test" config is not set to true.');
+                throw new LogicException('You cannot create the client used in functional tests if the "framework.test" config is not set to true.');
             }
-            throw new \LogicException('You cannot create the client used in functional tests if the BrowserKit component is not available. Try running "composer require symfony/browser-kit"');
+            throw new LogicException('You cannot create the client used in functional tests if the BrowserKit component is not available. Try running "composer require symfony/browser-kit"');
         }
 
         $client->setServerParameters($server);
 
-        return self::getClient($client);
+        /** @var KernelBrowser $wrapperClient */
+        $wrapperClient = self::getClient($client);
+
+        return $wrapperClient;
     }
 }

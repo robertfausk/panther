@@ -15,6 +15,7 @@ namespace Symfony\Component\Panther;
 
 use Facebook\WebDriver\Exception\NoSuchElementException;
 use Facebook\WebDriver\Exception\TimeoutException;
+use Facebook\WebDriver\Exception\WebDriverException;
 use Facebook\WebDriver\JavaScriptExecutor;
 use Facebook\WebDriver\Remote\RemoteWebDriver;
 use Facebook\WebDriver\WebDriver;
@@ -39,6 +40,8 @@ use Symfony\Component\Panther\Cookie\CookieJar;
 use Symfony\Component\Panther\DomCrawler\Crawler as PantherCrawler;
 use Symfony\Component\Panther\DomCrawler\Form as PantherForm;
 use Symfony\Component\Panther\DomCrawler\Link as PantherLink;
+use Symfony\Component\Panther\Exception\InvalidArgumentException;
+use Symfony\Component\Panther\Exception\LogicException;
 use Symfony\Component\Panther\ProcessManager\BrowserManagerInterface;
 use Symfony\Component\Panther\ProcessManager\ChromeManager;
 use Symfony\Component\Panther\ProcessManager\FirefoxManager;
@@ -56,13 +59,10 @@ final class Client extends AbstractBrowser implements WebDriver, JavaScriptExecu
 {
     use ExceptionThrower;
 
-    /**
-     * @var WebDriver|null
-     */
-    private $webDriver;
-    private $browserManager;
-    private $baseUri;
-    private $isFirefox = false;
+    private ?WebDriver $webDriver = null;
+    private BrowserManagerInterface $browserManager;
+    private ?string $baseUri = null;
+    private bool $isFirefox = false;
 
     /**
      * @param string[]|null $arguments
@@ -108,7 +108,11 @@ final class Client extends AbstractBrowser implements WebDriver, JavaScriptExecu
 
     public function __destruct()
     {
-        $this->quit();
+        try {
+            $this->quit();
+        } catch (WebDriverException) {
+            // ignore
+        }
     }
 
     public function start(): void
@@ -139,20 +143,20 @@ final class Client extends AbstractBrowser implements WebDriver, JavaScriptExecu
         $this->isFirefox = false;
     }
 
-    public function getRequest()
+    public function getRequest(): object
     {
-        throw new \LogicException('HttpFoundation Request object is not available when using WebDriver.');
+        throw new LogicException('HttpFoundation Request object is not available when using WebDriver.');
     }
 
-    public function getResponse()
+    public function getResponse(): object
     {
-        throw new \LogicException('HttpFoundation Response object is not available when using WebDriver.');
+        throw new LogicException('HttpFoundation Response object is not available when using WebDriver.');
     }
 
     public function followRedirects($followRedirects = true): void
     {
         if (!$followRedirects) {
-            throw new \InvalidArgumentException('Redirects are always followed when using WebDriver.');
+            throw new InvalidArgumentException('Redirects are always followed when using WebDriver.');
         }
     }
 
@@ -164,7 +168,7 @@ final class Client extends AbstractBrowser implements WebDriver, JavaScriptExecu
     public function setMaxRedirects($maxRedirects): void
     {
         if (-1 !== $maxRedirects) {
-            throw new \InvalidArgumentException('There are no max redirects when using WebDriver.');
+            throw new InvalidArgumentException('There are no max redirects when using WebDriver.');
         }
     }
 
@@ -176,31 +180,31 @@ final class Client extends AbstractBrowser implements WebDriver, JavaScriptExecu
     public function insulate($insulated = true): void
     {
         if (!$insulated) {
-            throw new \InvalidArgumentException('Requests are always insulated when using WebDriver.');
+            throw new InvalidArgumentException('Requests are always insulated when using WebDriver.');
         }
     }
 
     public function setServerParameters(array $server): void
     {
-        throw new \InvalidArgumentException('Server parameters cannot be set when using WebDriver.');
+        throw new InvalidArgumentException('Server parameters cannot be set when using WebDriver.');
     }
 
     public function setServerParameter($key, $value): void
     {
-        throw new \InvalidArgumentException('Server parameters cannot be set when using WebDriver.');
+        throw new InvalidArgumentException('Server parameters cannot be set when using WebDriver.');
     }
 
-    public function getServerParameter($key, $default = '')
+    public function getServerParameter($key, $default = ''): mixed
     {
-        throw new \InvalidArgumentException('Server parameters cannot be retrieved when using WebDriver.');
+        throw new InvalidArgumentException('Server parameters cannot be retrieved when using WebDriver.');
     }
 
     public function getHistory(): History
     {
-        throw new \LogicException('History is not available when using WebDriver.');
+        throw new LogicException('History is not available when using WebDriver.');
     }
 
-    public function click(Link $link): Crawler
+    public function click(Link $link, array $serverParameters = []): Crawler
     {
         if ($link instanceof PantherLink) {
             $link->getElement()->click();
@@ -208,7 +212,7 @@ final class Client extends AbstractBrowser implements WebDriver, JavaScriptExecu
             return $this->crawler = $this->createCrawler();
         }
 
-        return parent::click($link);
+        return parent::click($link, $serverParameters);
     }
 
     public function submit(Form $form, array $values = [], array $serverParameters = []): Crawler
@@ -255,26 +259,27 @@ final class Client extends AbstractBrowser implements WebDriver, JavaScriptExecu
         return $this->crawler = $this->createCrawler();
     }
 
-    public function request(string $method, string $uri, array $parameters = [], array $files = [], array $server = [], string $content = null, bool $changeHistory = true): PantherCrawler
+    public function request(string $method, string $uri, array $parameters = [], array $files = [], array $server = [], ?string $content = null, bool $changeHistory = true): PantherCrawler
     {
         if ('GET' !== $method) {
-            throw new \InvalidArgumentException('Only the GET method is supported when using WebDriver.');
+            throw new InvalidArgumentException('Only the GET method is supported when using WebDriver.');
         }
         if (null !== $content) {
-            throw new \InvalidArgumentException('Setting a content is not supported when using WebDriver.');
+            throw new InvalidArgumentException('Setting a content is not supported when using WebDriver.');
         }
         if (!$changeHistory) {
-            throw new \InvalidArgumentException('The history always change when using WebDriver.');
+            throw new InvalidArgumentException('The history always change when using WebDriver.');
         }
 
         foreach (['parameters', 'files', 'server'] as $arg) {
             if ([] !== $$arg) {
-                throw new \InvalidArgumentException(sprintf('The parameter "$%s" is not supported when using WebDriver.', $arg));
+                throw new InvalidArgumentException(\sprintf('The parameter "$%s" is not supported when using WebDriver.', $arg));
             }
         }
 
         $this->get($uri);
 
+        // @phpstan-ignore-next-line The above call to get() sets the proper crawler
         return $this->crawler;
     }
 
@@ -288,7 +293,7 @@ final class Client extends AbstractBrowser implements WebDriver, JavaScriptExecu
 
     protected function doRequest($request)
     {
-        throw new \LogicException('Not useful in WebDriver mode.');
+        throw new LogicException('Not useful in WebDriver mode.');
     }
 
     public function back(): PantherCrawler
@@ -317,7 +322,7 @@ final class Client extends AbstractBrowser implements WebDriver, JavaScriptExecu
 
     public function followRedirect(): PantherCrawler
     {
-        throw new \LogicException('Redirects are always followed when using WebDriver.');
+        throw new LogicException('Redirects are always followed when using WebDriver.');
     }
 
     public function restart(): void
@@ -348,7 +353,8 @@ final class Client extends AbstractBrowser implements WebDriver, JavaScriptExecu
         $by = self::createWebDriverByFromLocator($locator);
 
         $this->wait($timeoutInSecond, $intervalInMillisecond)->until(
-            WebDriverExpectedCondition::presenceOfElementLocated($by)
+            WebDriverExpectedCondition::presenceOfElementLocated($by),
+            \sprintf('Element "%s" not found within %d seconds.', $locator, $timeoutInSecond),
         );
 
         return $this->crawler = $this->createCrawler();
@@ -367,7 +373,8 @@ final class Client extends AbstractBrowser implements WebDriver, JavaScriptExecu
         $element = $this->findElement($by);
 
         $this->wait($timeoutInSecond, $intervalInMillisecond)->until(
-            WebDriverExpectedCondition::stalenessOf($element)
+            WebDriverExpectedCondition::stalenessOf($element),
+            \sprintf('Element "%s" did not become stale within %d seconds.', $locator, $timeoutInSecond),
         );
 
         return $this->crawler = $this->createCrawler();
@@ -384,7 +391,8 @@ final class Client extends AbstractBrowser implements WebDriver, JavaScriptExecu
         $by = self::createWebDriverByFromLocator($locator);
 
         $this->wait($timeoutInSecond, $intervalInMillisecond)->until(
-            WebDriverExpectedCondition::visibilityOfElementLocated($by)
+            WebDriverExpectedCondition::visibilityOfElementLocated($by),
+            \sprintf('Element "%s" did not become visible within %d seconds.', $locator, $timeoutInSecond),
         );
 
         return $this->crawler = $this->createCrawler();
@@ -401,7 +409,8 @@ final class Client extends AbstractBrowser implements WebDriver, JavaScriptExecu
         $by = self::createWebDriverByFromLocator($locator);
 
         $this->wait($timeoutInSecond, $intervalInMillisecond)->until(
-            WebDriverExpectedCondition::invisibilityOfElementLocated($by)
+            WebDriverExpectedCondition::invisibilityOfElementLocated($by),
+            \sprintf('Element "%s" did not become invisible within %d seconds.', $locator, $timeoutInSecond),
         );
 
         return $this->crawler = $this->createCrawler();
@@ -418,7 +427,8 @@ final class Client extends AbstractBrowser implements WebDriver, JavaScriptExecu
         $by = self::createWebDriverByFromLocator($locator);
 
         $this->wait($timeoutInSecond, $intervalInMillisecond)->until(
-            WebDriverExpectedCondition::elementTextContains($by, $text)
+            WebDriverExpectedCondition::elementTextContains($by, $text),
+            \sprintf('Element "%s" did not contain "%s" within %d seconds.', $locator, $text, $timeoutInSecond),
         );
 
         return $this->crawler = $this->createCrawler();
@@ -435,7 +445,8 @@ final class Client extends AbstractBrowser implements WebDriver, JavaScriptExecu
         $by = self::createWebDriverByFromLocator($locator);
 
         $this->wait($timeoutInSecond, $intervalInMillisecond)->until(
-            PantherWebDriverExpectedCondition::elementTextNotContains($by, $text)
+            PantherWebDriverExpectedCondition::elementTextNotContains($by, $text),
+            \sprintf('Element "%s" still contained "%s" after %d seconds.', $locator, $text, $timeoutInSecond),
         );
 
         return $this->crawler = $this->createCrawler();
@@ -452,7 +463,8 @@ final class Client extends AbstractBrowser implements WebDriver, JavaScriptExecu
         $by = self::createWebDriverByFromLocator($locator);
 
         $this->wait($timeoutInSecond, $intervalInMillisecond)->until(
-            PantherWebDriverExpectedCondition::elementAttributeContains($by, $attribute, $text)
+            PantherWebDriverExpectedCondition::elementAttributeContains($by, $attribute, $text),
+            \sprintf('Element "%s" attribute "%s" did not contain "%s" within %d seconds.', $locator, $attribute, $text, $timeoutInSecond),
         );
 
         return $this->crawler = $this->createCrawler();
@@ -469,7 +481,8 @@ final class Client extends AbstractBrowser implements WebDriver, JavaScriptExecu
         $by = self::createWebDriverByFromLocator($locator);
 
         $this->wait($timeoutInSecond, $intervalInMillisecond)->until(
-            PantherWebDriverExpectedCondition::elementAttributeNotContains($by, $attribute, $text)
+            PantherWebDriverExpectedCondition::elementAttributeNotContains($by, $attribute, $text),
+            \sprintf('Element "%s" attribute "%s" still contained "%s" after %d seconds.', $locator, $attribute, $text, $timeoutInSecond),
         );
 
         return $this->crawler = $this->createCrawler();
@@ -486,7 +499,8 @@ final class Client extends AbstractBrowser implements WebDriver, JavaScriptExecu
         $by = self::createWebDriverByFromLocator($locator);
 
         $this->wait($timeoutInSecond, $intervalInMillisecond)->until(
-            PantherWebDriverExpectedCondition::elementEnabled($by)
+            PantherWebDriverExpectedCondition::elementEnabled($by),
+            \sprintf('Element "%s" did not become enabled within %d seconds.', $locator, $timeoutInSecond),
         );
 
         return $this->crawler = $this->createCrawler();
@@ -503,7 +517,8 @@ final class Client extends AbstractBrowser implements WebDriver, JavaScriptExecu
         $by = self::createWebDriverByFromLocator($locator);
 
         $this->wait($timeoutInSecond, $intervalInMillisecond)->until(
-            PantherWebDriverExpectedCondition::elementDisabled($by)
+            PantherWebDriverExpectedCondition::elementDisabled($by),
+            \sprintf('Element "%s" did not become disabled within %d seconds.', $locator, $timeoutInSecond),
         );
 
         return $this->crawler = $this->createCrawler();
@@ -525,6 +540,11 @@ final class Client extends AbstractBrowser implements WebDriver, JavaScriptExecu
 
         // Prepend the base URI to URIs without a host
         if (null !== $this->baseUri && (false !== $components = parse_url($url)) && !isset($components['host'])) {
+            if (str_starts_with($url, '/') && str_ends_with($this->baseUri, '/')) {
+                $url = substr($url, 1);
+            } elseif (!str_starts_with($url, '/') && !str_ends_with($this->baseUri, '/')) {
+                $url = '/'.$url;
+            }
             $url = $this->baseUri.$url;
         }
 
@@ -633,10 +653,8 @@ final class Client extends AbstractBrowser implements WebDriver, JavaScriptExecu
     /**
      * @param string $name
      * @param array  $params
-     *
-     * @return mixed
      */
-    public function execute($name, $params)
+    public function execute($name, $params): mixed
     {
         $this->start();
 
@@ -664,10 +682,8 @@ final class Client extends AbstractBrowser implements WebDriver, JavaScriptExecu
      * @param string $script
      *
      * @throws \Exception
-     *
-     * @return mixed
      */
-    public function executeScript($script, array $arguments = [])
+    public function executeScript($script, array $arguments = []): mixed
     {
         if (!$this->webDriver instanceof JavaScriptExecutor) {
             throw $this->createException(JavaScriptExecutor::class);
@@ -680,10 +696,8 @@ final class Client extends AbstractBrowser implements WebDriver, JavaScriptExecu
      * @param string $script
      *
      * @throws \Exception
-     *
-     * @return mixed
      */
-    public function executeAsyncScript($script, array $arguments = [])
+    public function executeAsyncScript($script, array $arguments = []): mixed
     {
         if (!$this->webDriver instanceof JavaScriptExecutor) {
             throw $this->createException(JavaScriptExecutor::class);
@@ -776,9 +790,9 @@ final class Client extends AbstractBrowser implements WebDriver, JavaScriptExecu
     private function createException(string $implementableClass): \Exception
     {
         if (null === $this->webDriver) {
-            return new \LogicException(sprintf('WebDriver not started yet. Call method `start()` first before calling any `%s` method.', $implementableClass));
+            return new \LogicException(\sprintf('WebDriver not started yet. Call method `start()` first before calling any `%s` method.', $implementableClass));
         }
 
-        return new \RuntimeException(sprintf('"%s" does not implement "%s".', \get_class($this->webDriver), $implementableClass));
+        return new \RuntimeException(\sprintf('"%s" does not implement "%s".', \get_class($this->webDriver), $implementableClass));
     }
 }

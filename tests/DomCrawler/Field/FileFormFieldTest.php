@@ -31,7 +31,7 @@ class FileFormFieldTest extends TestCase
             return;
         }
 
-        if (4 === $haystack['error'] ?? 0) {
+        if (4 === ($haystack['error'] ?? 0)) {
             $this->markTestSkipped('File upload is currently buggy with Firefox'); // FIXME
         }
 
@@ -72,8 +72,6 @@ class FileFormFieldTest extends TestCase
 
     /**
      * @dataProvider clientFactoryProvider
-     *
-     * @param mixed $class
      */
     public function testFileUploadWithSetFilePath(callable $clientFactory, $class): void
     {
@@ -128,7 +126,7 @@ class FileFormFieldTest extends TestCase
         $fileFormField = $form['file_upload'];
         $this->assertInstanceOf(FileFormField::class, $fileFormField);
 
-        $nonCanonicalPath = sprintf('%s/../fixtures/%s', self::$webServerDir, self::$uploadFileName);
+        $nonCanonicalPath = \sprintf('%s/../fixtures/%s', self::$webServerDir, self::$uploadFileName);
 
         $fileFormField->upload($nonCanonicalPath);
         $fileFormField->setValue($nonCanonicalPath);

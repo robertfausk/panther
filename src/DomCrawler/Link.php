@@ -15,6 +15,7 @@ namespace Symfony\Component\Panther\DomCrawler;
 
 use Facebook\WebDriver\WebDriverElement;
 use Symfony\Component\DomCrawler\Link as BaseLink;
+use Symfony\Component\Panther\Exception\LogicException;
 use Symfony\Component\Panther\ExceptionThrower;
 
 /**
@@ -24,13 +25,13 @@ final class Link extends BaseLink
 {
     use ExceptionThrower;
 
-    private $element;
+    private WebDriverElement $element;
 
     public function __construct(WebDriverElement $element, string $currentUri)
     {
         $tagName = $element->getTagName();
         if ('a' !== $tagName && 'area' !== $tagName && 'link' !== $tagName) {
-            throw new \LogicException(sprintf('Unable to navigate from a "%s" tag.', $tagName));
+            throw new LogicException(\sprintf('Unable to navigate from a "%s" tag.', $tagName));
         }
 
         $this->element = $element;
@@ -43,7 +44,7 @@ final class Link extends BaseLink
         return $this->element;
     }
 
-    public function getNode()
+    public function getNode(): \DOMElement
     {
         throw $this->createNotSupportedException(__METHOD__);
     }

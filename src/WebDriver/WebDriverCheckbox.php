@@ -35,9 +35,9 @@ use Facebook\WebDriver\WebDriverSelectInterface;
  */
 class WebDriverCheckbox implements WebDriverSelectInterface
 {
-    private $element;
-    private $type;
-    private $name;
+    private WebDriverElement $element;
+    private string $type;
+    private ?string $name;
 
     public function __construct(WebDriverElement $element)
     {
@@ -172,7 +172,7 @@ class WebDriverCheckbox implements WebDriverSelectInterface
         }
 
         if (!$matched) {
-            throw new NoSuchElementException(sprintf('Cannot locate option with value: %s', $value));
+            throw new NoSuchElementException(\sprintf('Cannot locate option with value: %s', $value));
         }
     }
 
@@ -180,7 +180,7 @@ class WebDriverCheckbox implements WebDriverSelectInterface
     {
         $options = $this->getRelatedElements();
         if (!isset($options[$index])) {
-            throw new NoSuchElementException(sprintf('Cannot locate option with index: %d', $index));
+            throw new NoSuchElementException(\sprintf('Cannot locate option with index: %d', $index));
         }
 
         $select ? $this->selectOption($options[$index]) : $this->deselectOption($options[$index]);
@@ -189,15 +189,15 @@ class WebDriverCheckbox implements WebDriverSelectInterface
     private function byVisibleText($text, $partial = false, $select = true): void
     {
         foreach ($this->getRelatedElements() as $element) {
-            $normalizeFilter = sprintf($partial ? 'contains(normalize-space(.), %s)' : 'normalize-space(.) = %s', XPathEscaper::escapeQuotes($text));
+            $normalizeFilter = \sprintf($partial ? 'contains(normalize-space(.), %s)' : 'normalize-space(.) = %s', XPathEscaper::escapeQuotes($text));
 
             $xpath = 'ancestor::label';
-            $xpathNormalize = sprintf('%s[%s]', $xpath, $normalizeFilter);
+            $xpathNormalize = \sprintf('%s[%s]', $xpath, $normalizeFilter);
             if (null !== $id = $element->getAttribute('id')) {
-                $idFilter = sprintf('@for = %s', XPathEscaper::escapeQuotes($id));
+                $idFilter = \sprintf('@for = %s', XPathEscaper::escapeQuotes($id));
 
-                $xpath .= sprintf(' | //label[%s]', $idFilter);
-                $xpathNormalize .= sprintf(' | //label[%s and %s]', $idFilter, $normalizeFilter);
+                $xpath .= \sprintf(' | //label[%s]', $idFilter);
+                $xpathNormalize .= \sprintf(' | //label[%s and %s]', $idFilter, $normalizeFilter);
             }
 
             try {
@@ -235,12 +235,12 @@ class WebDriverCheckbox implements WebDriverSelectInterface
         if (null === $formId = $this->element->getAttribute('form')) {
             $form = $this->element->findElement(WebDriverBy::xpath('ancestor::form'));
             if ('' === $formId = (string) $form->getAttribute('id')) {
-                return $form->findElements(WebDriverBy::xpath(sprintf('.//input[@name = %s%s]', XPathEscaper::escapeQuotes($this->name), $valueSelector)));
+                return $form->findElements(WebDriverBy::xpath(\sprintf('.//input[@name = %s%s]', XPathEscaper::escapeQuotes($this->name), $valueSelector)));
             }
         }
 
         return $this->element->findElements(WebDriverBy::xpath(
-            sprintf('//form[@id = %1$s]//input[@name = %2$s%3$s] | //input[@form = %1$s and @name = %2$s%3$s]', XPathEscaper::escapeQuotes($formId), XPathEscaper::escapeQuotes($this->name), $valueSelector)
+            \sprintf('//form[@id = %1$s]//input[@name = %2$s%3$s] | //input[@form = %1$s and @name = %2$s%3$s]', XPathEscaper::escapeQuotes($formId), XPathEscaper::escapeQuotes($this->name), $valueSelector)
         ));
     }
 
